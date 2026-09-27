@@ -1850,265 +1850,243 @@
 
         window.addEventListener('DOMContentLoaded', loadPlayerEngine);
     </script>
-<!-- ── AD / POPUP BLOCKER ── -->
+<!-- ── PLAYER PROTECTION + KEYBOARD SHORTCUTS ── -->
 <script>
-  (function() {
-    // ── Layer 1: Override window.open on this page ──
-    const _open = window.open.bind(window);
-    window.open = function(url, name, features) {
-      if (!name || ['_blank','_self','_parent','_top'].includes(name)) {
-        console.warn('[AdBlock] Blocked window.open:', url);
-        return null;
-      }
-      return _open(url, name, features);
-    };
+(function () {
+  'use strict';
 
-    // ── Layer 2: Blur detector — catches popups from inside cross-origin iframes ──
-    // When an iframe calls window.open(), the parent tab loses focus.
-    // We instantly snap focus back to close/suppress the rogue popup.
-    let popupCloseTimer = null;
-    window.addEventListener('blur', function() {
-      clearTimeout(popupCloseTimer);
-      popupCloseTimer = setTimeout(function() {
-        try { window.focus(); } catch(e) {}
-        // Walk through all open windows and close any that aren't us
-        try {
-          if (window.opener) { window.opener.focus(); }
-        } catch(e) {}
-      }, 50);
+  // ─── Helpers ───────────────────────────────────────────────────────────────
+  function getIframe()    { return document.getElementById('videoPlayer'); }
+  function getModal()     { return document.getElementById('playerModal'); }
+  function isPlayerOpen() { const m = getModal(); return m && !m.classList.contains('hidden'); }
+
+  // ─── 1. window.open override (blocks parent-page popups) ──────────────────
+  const _origOpen = window.open.bind(window);
+  window.open = function (url, name, features) {
+    // Allow nothing from the player modal context
+    if (isPlayerOpen()) { console.warn('[SW] Blocked popup:', url); return null; }
+    return _origOpen(url, name, features);
+  };
+
+  // ─── 2. MutationObserver – remove injected foreign iframes ────────────────
+  const knownPlayers = ['vidlink.pro','vidsrc.cc','vidsrc.pro','vidsrc.net',
+    'vidsrc.sh','vidsrc.me','2embed.cc','autoembed.cc','embed.su',
+    'vidsrc.xyz','videasy.net','youtube.com','youtu.be'];
+  new MutationObserver(function (mutations) {
+    mutations.forEach(function (m) {
+      m.addedNodes.forEach(function (node) {
+        if (node.nodeType !== 1) return;
+        if (node.tagName === 'IFRAME' && node.id !== 'videoPlayer' && !node.closest('#playerRightPanel')) {
+          const src = node.src || '';
+          if (!knownPlayers.some(p => src.includes(p))) {
+            node.remove();
+            console.warn('[SW] Removed injected iframe:', src);
+          }
+        }
+      });
+    });
+  }).observe(document.body, { childList: true, subtree: true });
+
+  // ─── 3. Rogue anchor click killer ─────────────────────────────────────────
+  document.addEventListener('click', function (e) {
+    const a = e.target.closest('a[target="_blank"]');
+    if (a && a.href && !a.href.startsWith(window.location.origin)) {
+      const safe = ['youtube.com','youtu.be','themoviedb.org','imdb.com','vercel.app','sauce.watch','github.com'];
+      if (!safe.some(d => a.href.includes(d))) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        console.warn('[SW] Blocked anchor:', a.href);
+      }
+    }
+  }, true);
+
+  // ─── 4. PERMANENT click-pass-through shield ────────────────────────────────
+  // The shield sits on top of the iframe ALWAYS.
+  // • It captures keyboard focus so Space/arrows always work.
+  // • When the user CLICKS it, it briefly becomes pointer-events:none (150ms)
+  //   so the real click reaches the iframe (play/pause/progress bar).
+  // • After 150ms it's back on top — the popup from that click opens in background,
+  //   but our blur handler immediately closes the rogue window and refocuses us.
+  // • tabindex="0" means the shield div itself holds keyboard focus.
+  let shield = null;
+  let passingThrough = false;
+
+  function createShield() {
+    if (shield && shield.parentElement) shield.remove();
+    const iframe = getIframe();
+    if (!iframe) return;
+    const wrapper = iframe.parentElement;
+    if (!wrapper) return;
+
+    shield = document.createElement('div');
+    shield.id = 'swClickShield';
+    shield.tabIndex = 0;
+    shield.style.cssText = [
+      'position:absolute', 'inset:0', 'z-index:9',
+      'background:transparent', 'outline:none', 'cursor:pointer'
+    ].join(';');
+
+    shield.addEventListener('pointerdown', function () {
+      if (passingThrough) return;
+      passingThrough = true;
+      shield.style.pointerEvents = 'none';      // let click reach iframe
+      setTimeout(function () {
+        shield.style.pointerEvents = 'auto';    // take back control
+        passingThrough = false;
+        try { shield.focus({ preventScroll: true }); } catch(e) {}
+      }, 150);
     });
 
-    // ── Layer 3: Click shield overlay on the iframe ──
-    // Streaming providers fire ads on the FIRST interaction with the iframe.
-    // We place a transparent shield that absorbs that first click (blocking the popup),
-    // then briefly steps aside so the real play/pause interaction goes through,
-    // then reinstates itself to block the next ad cycle.
-    function installClickShield() {
-      const iframe = document.getElementById('videoPlayer');
-      if (!iframe) return;
-      const playerWrapper = iframe.parentElement;
-      if (!playerWrapper) return;
-
-      let shield = null;
-      let shieldEnabled = false;
-
-      function createShield() {
-        if (shield && shield.parentElement) shield.remove();
-        shield = document.createElement('div');
-        shield.id = 'adClickShield';
-        shield.style.cssText = 'position:absolute;inset:0;z-index:9;cursor:pointer;background:transparent;';
-        playerWrapper.appendChild(shield);
-        shieldEnabled = true;
-
-        shield.addEventListener('pointerdown', function(e) {
-          // Step 1: Remove shield so the click reaches the real player
-          shield.remove();
-          shieldEnabled = false;
-          // Step 2: Re-install shield after delay to catch the next ad cycle
-          setTimeout(createShield, 4000);
-        }, { once: true });
-      }
-
-      // Activate shield whenever the iframe src changes (server switch)
-      new MutationObserver(function() {
-        setTimeout(createShield, 1800);
-      }).observe(iframe, { attributes: true, attributeFilter: ['src'] });
-
-      // Initial activation after player loads
-      setTimeout(createShield, 1800);
-    }
-
-    // ── Layer 4: Kill rogue anchor clicks ──
-    document.addEventListener('click', function(e) {
-      const a = e.target.closest('a[target="_blank"]');
-      if (a && a.href && !a.href.startsWith(window.location.origin)) {
-        const allowed = ['youtube.com','youtu.be','themoviedb.org','imdb.com','vercel.app','sauce.watch','github.com'];
-        if (!allowed.some(d => a.href.includes(d))) {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          console.warn('[AdBlock] Blocked anchor:', a.href);
+    // Keep keyboard focus on shield (not iframe) at all times
+    shield.addEventListener('blur', function () {
+      setTimeout(function () {
+        if (isPlayerOpen() && !passingThrough) {
+          try { shield.focus({ preventScroll: true }); } catch(e) {}
         }
-      }
-    }, true);
+      }, 20);
+    });
 
-    // ── Layer 5: MutationObserver — remove injected foreign iframes ──
-    const knownPlayers = ['vidlink.pro','vidsrc.cc','vidsrc.pro','vidsrc.net','autoembed.cc','embed.su','vidsrc.xyz','videasy.net','youtube.com','youtu.be'];
-    new MutationObserver(function(mutations) {
-      mutations.forEach(function(m) {
-        m.addedNodes.forEach(function(node) {
-          if (node.nodeType === 1 && node.tagName === 'IFRAME' && node.id !== 'videoPlayer' && !node.closest('#playerRightPanel')) {
-            const src = node.src || '';
-            if (!knownPlayers.some(p => src.includes(p))) {
-              node.remove();
-              console.warn('[AdBlock] Removed injected iframe:', src);
-            }
-          }
-        });
-      });
-    }).observe(document.body, { childList: true, subtree: true });
-
-    // Boot the click shield once DOM is ready
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', installClickShield);
-    } else {
-      installClickShield();
-    }
-  })();
-</script>
-<!-- ── KEYBOARD SHORTCUTS ── -->
-<script>
-(function() {
-  let isPlaying = true; // assume playing by default
-  let isMutedKb = false;
-  let kbFeedbackTimer = null;
-  let hintTimer = null;
-
-  function getIframe() { return document.getElementById('videoPlayer'); }
-  function isPlayerOpen() {
-    const m = document.getElementById('playerModal');
-    return m && !m.classList.contains('hidden');
+    wrapper.appendChild(shield);
+    setTimeout(function () {
+      try { shield.focus({ preventScroll: true }); } catch(e) {}
+    }, 100);
   }
 
-  // Send postMessage to iframe (works for providers like vidlink.pro that listen)
+  // Re-create shield whenever iframe src changes (new server or episode)
+  function observeIframe() {
+    const iframe = getIframe();
+    if (!iframe) return;
+    new MutationObserver(function () {
+      setTimeout(createShield, 1200);
+    }).observe(iframe, { attributes: true, attributeFilter: ['src'] });
+  }
+
+  // Also create shield when player opens
+  const modal = getModal();
+  if (modal) {
+    new MutationObserver(function () {
+      if (!modal.classList.contains('hidden')) {
+        setTimeout(createShield, 400);
+        setTimeout(showHintBar, 1000);
+      }
+    }).observe(modal, { attributes: true, attributeFilter: ['class'] });
+  }
+
+  // ─── 5. Blur handler – close rogue popup windows ──────────────────────────
+  // When the player is open and focus leaves (popup opened), instantly reclaim.
+  // We skip this if the user intentionally switched tabs (visibilitychange).
+  let tabHidden = false;
+  document.addEventListener('visibilitychange', function () { tabHidden = document.hidden; });
+
+  window.addEventListener('blur', function () {
+    if (!isPlayerOpen() || tabHidden) return;
+    setTimeout(function () {
+      try { window.focus(); } catch(e) {}
+      // Refocus shield so keyboard keeps working
+      if (shield && shield.parentElement && !passingThrough) {
+        try { shield.focus({ preventScroll: true }); } catch(e) {}
+      }
+    }, 80);
+  });
+
+  // ─── 6. Keyboard shortcuts ─────────────────────────────────────────────────
+  let isPlaying = true;
+  let isMutedKb = false;
+  let kbTimer = null;
+  let hintTimer = null;
+
   function sendToPlayer(msg) {
     const iframe = getIframe();
     if (!iframe || !iframe.src) return;
-    try {
-      const origin = new URL(iframe.src).origin;
-      iframe.contentWindow.postMessage(msg, origin);
-    } catch(e) {}
-    // Also try wildcard for cross-origin
     try { iframe.contentWindow.postMessage(msg, '*'); } catch(e) {}
   }
 
-  // Animated feedback icon in centre of screen
-  function showFeedback(iconClass, label) {
-    const wrapper = document.getElementById('kbFeedback');
-    const iconEl = document.getElementById('kbFeedbackIco');
-    const iconBox = document.getElementById('kbFeedbackIcon');
-    if (!wrapper || !iconEl) return;
-
-    iconEl.className = 'fas ' + iconClass;
-    wrapper.style.opacity = '1';
-    iconBox.style.transform = 'scale(1)';
-
-    clearTimeout(kbFeedbackTimer);
-    kbFeedbackTimer = setTimeout(function() {
-      wrapper.style.opacity = '0';
-      iconBox.style.transform = 'scale(0.8)';
-    }, 600);
+  function showFeedback(iconClass) {
+    const wrap = document.getElementById('kbFeedback');
+    const ico  = document.getElementById('kbFeedbackIco');
+    const box  = document.getElementById('kbFeedbackIcon');
+    if (!wrap || !ico) return;
+    ico.className = 'fas ' + iconClass;
+    wrap.style.opacity = '1';
+    box.style.transform = 'scale(1)';
+    clearTimeout(kbTimer);
+    kbTimer = setTimeout(function () {
+      wrap.style.opacity = '0';
+      box.style.transform = 'scale(0.8)';
+    }, 700);
   }
 
-  // Show the hint bar briefly when player opens
   function showHintBar() {
     const bar = document.getElementById('kbHintBar');
     if (!bar) return;
     bar.style.opacity = '1';
     clearTimeout(hintTimer);
-    hintTimer = setTimeout(function() { bar.style.opacity = '0'; }, 3500);
+    hintTimer = setTimeout(function () { bar.style.opacity = '0'; }, 4000);
   }
 
-  // Watch for player open/close to show hints
-  const playerModal = document.getElementById('playerModal');
-  if (playerModal) {
-    const modalObserver = new MutationObserver(function() {
-      if (!playerModal.classList.contains('hidden')) {
-        setTimeout(showHintBar, 800);
-        // Snap focus back to parent whenever player is open
-        setTimeout(function() { try { window.focus(); } catch(e) {} }, 100);
-      }
-    });
-    modalObserver.observe(playerModal, { attributes: true, attributeFilter: ['class'] });
-  }
-
-  // Continuously reclaim focus when player is open (blur events from iframe)
-  window.addEventListener('blur', function() {
-    if (isPlayerOpen()) {
-      setTimeout(function() { try { window.focus(); } catch(e) {} }, 30);
-    }
-  });
-
-  // ── Main keyboard handler ──
-  document.addEventListener('keydown', function(e) {
+  // Keyboard events are captured on the shield div (which holds focus)
+  // AND on document (capture phase) as a fallback
+  function handleKey(e) {
     if (!isPlayerOpen()) return;
-
-    // Don't hijack shortcuts when typing in an input
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
-    switch(e.code) {
-      case 'Space':
-      case 'KeyK': // YouTube-style K shortcut
+    switch (e.code) {
+      case 'Space': case 'KeyK':
         e.preventDefault();
         isPlaying = !isPlaying;
-        if (isPlaying) {
-          sendToPlayer({ action: 'play' });
-          sendToPlayer('play');
-          showFeedback('fa-play', 'Play');
-        } else {
-          sendToPlayer({ action: 'pause' });
-          sendToPlayer('pause');
-          showFeedback('fa-pause', 'Pause');
-        }
+        sendToPlayer({ action: isPlaying ? 'play' : 'pause' });
+        showFeedback(isPlaying ? 'fa-play' : 'fa-pause');
         break;
-
-      case 'ArrowRight':
-      case 'KeyL': // YouTube-style L shortcut (+10s)
+      case 'ArrowRight': case 'KeyL':
         e.preventDefault();
         sendToPlayer({ action: 'seek', seconds: 10 });
-        sendToPlayer({ seek: 10 });
-        showFeedback('fa-forward', '+10s');
+        showFeedback('fa-forward');
         break;
-
-      case 'ArrowLeft':
-      case 'KeyJ': // YouTube-style J shortcut (-10s)
+      case 'ArrowLeft': case 'KeyJ':
         e.preventDefault();
         sendToPlayer({ action: 'seek', seconds: -10 });
-        sendToPlayer({ seek: -10 });
-        showFeedback('fa-backward', '-10s');
+        showFeedback('fa-backward');
         break;
-
       case 'ArrowUp':
         e.preventDefault();
         sendToPlayer({ action: 'volume', delta: 0.1 });
-        showFeedback('fa-volume-up', 'Volume +');
+        showFeedback('fa-volume-up');
         break;
-
       case 'ArrowDown':
         e.preventDefault();
         sendToPlayer({ action: 'volume', delta: -0.1 });
-        showFeedback('fa-volume-down', 'Volume -');
+        showFeedback('fa-volume-down');
         break;
-
       case 'KeyM':
         e.preventDefault();
         isMutedKb = !isMutedKb;
         sendToPlayer({ action: 'mute', value: isMutedKb });
-        sendToPlayer(isMutedKb ? 'mute' : 'unmute');
-        showFeedback(isMutedKb ? 'fa-volume-mute' : 'fa-volume-up', isMutedKb ? 'Muted' : 'Unmuted');
+        showFeedback(isMutedKb ? 'fa-volume-mute' : 'fa-volume-up');
         break;
-
       case 'KeyF':
         e.preventDefault();
         try {
           const iframe = getIframe();
-          if (iframe) {
-            if (document.fullscreenElement) {
-              document.exitFullscreen();
-            } else {
-              iframe.requestFullscreen();
-            }
-          }
+          if (document.fullscreenElement) document.exitFullscreen();
+          else if (iframe) iframe.requestFullscreen();
         } catch(e2) {}
-        showFeedback('fa-expand', 'Fullscreen');
+        showFeedback('fa-expand');
         break;
-
-      case 'Escape':
-        // Close player — trigger the close button
-        const closeBtn = document.getElementById('closePlayerBtn');
-        if (closeBtn) closeBtn.click();
+      case 'Escape': {
+        const btn = document.getElementById('closePlayerBtn');
+        if (btn) btn.click();
         break;
+      }
     }
-  }, true); // capture phase so we always get it first
+  }
+
+  document.addEventListener('keydown', handleKey, true);
+
+  // ─── Boot ─────────────────────────────────────────────────────────────────
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', observeIframe);
+  } else {
+    observeIframe();
+  }
 })();
 </script>
 </body>
