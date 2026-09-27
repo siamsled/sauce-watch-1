@@ -831,8 +831,8 @@
                     : `https://vidsrc.sh/embed/movie?tmdb=${currentMovieId}`;
             } else if (serverKey === 'vidlink') {
                 src = currentType === 'tv'
-                    ? `https://vidlink.pro/tv/${currentMovieId}/${activeSeasonNum}/${activeEpisodeNum}?primaryColor=e11d48&autoplay=false`
-                    : `https://vidlink.pro/movie/${currentMovieId}?primaryColor=e11d48&autoplay=false`;
+                    ? `https://vidlink.pro/tv/${currentMovieId}/${activeSeasonNum}/${activeEpisodeNum}?primaryColor=e11d48&autoplay=true`
+                    : `https://vidlink.pro/movie/${currentMovieId}?primaryColor=e11d48&autoplay=true`;
             } else if (serverKey === 'twoembed') {
                 src = currentType === 'tv'
                     ? `https://www.2embed.cc/embedtv/${currentMovieId}&s=${activeSeasonNum}&e=${activeEpisodeNum}`
@@ -1848,7 +1848,11 @@
             hero.classList.remove('trailer-focused');
         }
 
-        window.addEventListener('DOMContentLoaded', loadPlayerEngine);
+        window.addEventListener('DOMContentLoaded', async () => {
+            await loadPlayerEngine();
+            // Auto-open the player immediately — user already clicked Watch, no 2nd click needed
+            setTimeout(openPlayerModal, 300);
+        });
     </script>
 <!-- ── PLAYER PROTECTION + KEYBOARD SHORTCUTS ── -->
 <script>
