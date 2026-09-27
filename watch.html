@@ -1853,63 +1853,106 @@
 <!-- ── AD / POPUP BLOCKER ── -->
 <script>
   (function() {
-    // Layer 1: Override window.open to kill all popups
+    // ── Layer 1: Override window.open on this page ──
     const _open = window.open.bind(window);
     window.open = function(url, name, features) {
-      // Only allow named internal targets (e.g. fullscreen helpers) — block everything else
-      if (!name || name === '_blank' || name === '_self' || name === '_parent' || name === '_top') {
-        console.warn('[AdBlock] Blocked popup:', url);
+      if (!name || ['_blank','_self','_parent','_top'].includes(name)) {
+        console.warn('[AdBlock] Blocked window.open:', url);
         return null;
       }
       return _open(url, name, features);
     };
 
-    // Layer 2: Kill any rogue anchor clicks that try to open new tabs
+    // ── Layer 2: Blur detector — catches popups from inside cross-origin iframes ──
+    // When an iframe calls window.open(), the parent tab loses focus.
+    // We instantly snap focus back to close/suppress the rogue popup.
+    let popupCloseTimer = null;
+    window.addEventListener('blur', function() {
+      clearTimeout(popupCloseTimer);
+      popupCloseTimer = setTimeout(function() {
+        try { window.focus(); } catch(e) {}
+        // Walk through all open windows and close any that aren't us
+        try {
+          if (window.opener) { window.opener.focus(); }
+        } catch(e) {}
+      }, 50);
+    });
+
+    // ── Layer 3: Click shield overlay on the iframe ──
+    // Streaming providers fire ads on the FIRST interaction with the iframe.
+    // We place a transparent shield that absorbs that first click (blocking the popup),
+    // then briefly steps aside so the real play/pause interaction goes through,
+    // then reinstates itself to block the next ad cycle.
+    function installClickShield() {
+      const iframe = document.getElementById('videoPlayer');
+      if (!iframe) return;
+      const playerWrapper = iframe.parentElement;
+      if (!playerWrapper) return;
+
+      let shield = null;
+      let shieldEnabled = false;
+
+      function createShield() {
+        if (shield && shield.parentElement) shield.remove();
+        shield = document.createElement('div');
+        shield.id = 'adClickShield';
+        shield.style.cssText = 'position:absolute;inset:0;z-index:9;cursor:pointer;background:transparent;';
+        playerWrapper.appendChild(shield);
+        shieldEnabled = true;
+
+        shield.addEventListener('pointerdown', function(e) {
+          // Step 1: Remove shield so the click reaches the real player
+          shield.remove();
+          shieldEnabled = false;
+          // Step 2: Re-install shield after delay to catch the next ad cycle
+          setTimeout(createShield, 4000);
+        }, { once: true });
+      }
+
+      // Activate shield whenever the iframe src changes (server switch)
+      new MutationObserver(function() {
+        setTimeout(createShield, 1800);
+      }).observe(iframe, { attributes: true, attributeFilter: ['src'] });
+
+      // Initial activation after player loads
+      setTimeout(createShield, 1800);
+    }
+
+    // ── Layer 4: Kill rogue anchor clicks ──
     document.addEventListener('click', function(e) {
       const a = e.target.closest('a[target="_blank"]');
-      if (a && a.href && !a.href.startsWith(window.location.origin) && !a.closest('#videoPlayer')) {
-        const allowed = [
-          'youtube.com', 'youtu.be', 'themoviedb.org', 'imdb.com',
-          'vercel.app', 'sauce.watch', 'github.com'
-        ];
-        const isAllowed = allowed.some(d => a.href.includes(d));
-        if (!isAllowed) {
+      if (a && a.href && !a.href.startsWith(window.location.origin)) {
+        const allowed = ['youtube.com','youtu.be','themoviedb.org','imdb.com','vercel.app','sauce.watch','github.com'];
+        if (!allowed.some(d => a.href.includes(d))) {
           e.preventDefault();
           e.stopImmediatePropagation();
-          console.warn('[AdBlock] Blocked rogue anchor:', a.href);
+          console.warn('[AdBlock] Blocked anchor:', a.href);
         }
       }
     }, true);
 
-    // Layer 3: Intercept beforeunload / navigation attempts from iframe messages
-    window.addEventListener('message', function(e) {
-      if (e.data && typeof e.data === 'string') {
-        if (e.data.includes('redirect') || e.data.includes('popup') || e.data.includes('window.open')) {
-          console.warn('[AdBlock] Blocked iframe message:', e.data);
-          e.stopImmediatePropagation();
-        }
-      }
-    }, true);
-
-    // Layer 4: MutationObserver to remove any injected ad overlays or new windows spawned in DOM
-    const observer = new MutationObserver(function(mutations) {
-      mutations.forEach(function(mutation) {
-        mutation.addedNodes.forEach(function(node) {
-          if (node.nodeType === 1) {
-            // Kill injected iframes that are NOT our main player
-            if (node.tagName === 'IFRAME' && node.id !== 'videoPlayer' && !node.closest('#playerRightPanel')) {
-              const src = node.src || '';
-              const knownPlayers = ['vidlink.pro', 'vidsrc.cc', 'vidsrc.pro', 'vidsrc.net', 'autoembed.cc', 'embed.su', 'vidsrc.xyz', 'videasy.net', 'youtube.com', 'youtu.be'];
-              if (!knownPlayers.some(p => src.includes(p))) {
-                node.remove();
-                console.warn('[AdBlock] Removed injected iframe:', src);
-              }
+    // ── Layer 5: MutationObserver — remove injected foreign iframes ──
+    const knownPlayers = ['vidlink.pro','vidsrc.cc','vidsrc.pro','vidsrc.net','autoembed.cc','embed.su','vidsrc.xyz','videasy.net','youtube.com','youtu.be'];
+    new MutationObserver(function(mutations) {
+      mutations.forEach(function(m) {
+        m.addedNodes.forEach(function(node) {
+          if (node.nodeType === 1 && node.tagName === 'IFRAME' && node.id !== 'videoPlayer' && !node.closest('#playerRightPanel')) {
+            const src = node.src || '';
+            if (!knownPlayers.some(p => src.includes(p))) {
+              node.remove();
+              console.warn('[AdBlock] Removed injected iframe:', src);
             }
           }
         });
       });
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
+    }).observe(document.body, { childList: true, subtree: true });
+
+    // Boot the click shield once DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', installClickShield);
+    } else {
+      installClickShield();
+    }
   })();
 </script>
 </body>
