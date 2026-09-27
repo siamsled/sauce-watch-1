@@ -364,7 +364,7 @@
     </main>
 
     <!-- Streaming Modal Player Overlay (Cinema Mode) -->
-    <div id="playerModal" class="hidden fixed inset-0 z-[200] bg-black flex justify-center items-center select-none overflow-hidden">
+    <div id="playerModal" class="hidden fixed inset-0 z-[200] bg-black flex justify-center items-center select-none overflow-hidden" style="height: 100dvh;">
         <!-- The Video Player IFrame -->
         <div class="absolute inset-0 w-full h-full z-0 bg-black">
             <iframe id="videoPlayer" 
@@ -393,9 +393,7 @@
                 
                 <!-- Right: Settings & Next Ep Buttons -->
                 <div class="flex items-center gap-3">
-                    <button id="playerServersBtnTop" class="w-11 h-11 rounded-full bg-black/40 hover:bg-black/60 border border-white/10 flex items-center justify-center text-white text-base transition-all shadow-lg hover:scale-105" title="Servers">
-                        <i class="fas fa-server"></i>
-                    </button>
+
                     <button id="playerNextEpBtnTop" class="hidden w-11 h-11 rounded-full bg-black/40 hover:bg-black/60 border border-white/10 flex items-center justify-center text-white text-base transition-all shadow-lg hover:scale-105" title="Next Episode">
                         <i class="fas fa-step-forward"></i>
                     </button>
@@ -1064,21 +1062,6 @@
                 };
             }
             
-            const serversBtnTop = document.getElementById('playerServersBtnTop');
-            if (serversBtnTop) {
-                serversBtnTop.onclick = (e) => {
-                    e.stopPropagation();
-                    const panel = document.getElementById('playerRightPanel');
-                    const isHidden = panel.classList.contains('hidden');
-                    if (isHidden || activePlayerTab !== 'servers') {
-                        activePlayerTab = 'servers';
-                        panel.classList.remove('hidden');
-                        renderServersSidebar();
-                    } else {
-                        panel.classList.add('hidden');
-                    }
-                };
-            }
 
             // Click anywhere on hero section (excluding buttons/links) to toggle mute
             const heroSec = document.getElementById('heroSection');
