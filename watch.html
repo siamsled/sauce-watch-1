@@ -439,6 +439,7 @@
                     allowfullscreen 
                     scrolling="no" 
                     frameborder="0" 
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
                     allow="autoplay; encrypted-media; picture-in-picture">
             </iframe>
         </div>
@@ -1974,77 +1975,7 @@
     }
   }, true);
 
-  // ─── 4. PERMANENT click-pass-through shield ────────────────────────────────
-  // The shield sits on top of the iframe ALWAYS.
-  // • It captures keyboard focus so Space/arrows always work.
-  // • When the user CLICKS it, it briefly becomes pointer-events:none (150ms)
-  //   so the real click reaches the iframe (play/pause/progress bar).
-  // • After 150ms it's back on top — the popup from that click opens in background,
-  //   but our blur handler immediately closes the rogue window and refocuses us.
-  // • tabindex="0" means the shield div itself holds keyboard focus.
-  let shield = null;
-  let passingThrough = false;
-
-  function createShield() {
-    if (shield && shield.parentElement) shield.remove();
-    const iframe = getIframe();
-    if (!iframe) return;
-    const wrapper = iframe.parentElement;
-    if (!wrapper) return;
-
-    shield = document.createElement('div');
-    shield.id = 'swClickShield';
-    shield.tabIndex = 0;
-    shield.style.cssText = [
-      'position:absolute', 'inset:0', 'z-index:9',
-      'background:transparent', 'outline:none', 'cursor:pointer'
-    ].join(';');
-
-    shield.addEventListener('pointerdown', function () {
-      if (passingThrough) return;
-      passingThrough = true;
-      shield.style.pointerEvents = 'none';      // let click reach iframe
-      setTimeout(function () {
-        shield.style.pointerEvents = 'auto';    // take back control
-        passingThrough = false;
-        try { shield.focus({ preventScroll: true }); } catch(e) {}
-      }, 150);
-    });
-
-    // Keep keyboard focus on shield (not iframe) at all times
-    shield.addEventListener('blur', function () {
-      setTimeout(function () {
-        if (isPlayerOpen() && !passingThrough) {
-          try { shield.focus({ preventScroll: true }); } catch(e) {}
-        }
-      }, 20);
-    });
-
-    wrapper.appendChild(shield);
-    setTimeout(function () {
-      try { shield.focus({ preventScroll: true }); } catch(e) {}
-    }, 100);
-  }
-
-  // Re-create shield whenever iframe src changes (new server or episode)
-  function observeIframe() {
-    const iframe = getIframe();
-    if (!iframe) return;
-    new MutationObserver(function () {
-      setTimeout(createShield, 1200);
-    }).observe(iframe, { attributes: true, attributeFilter: ['src'] });
-  }
-
-  // Also create shield when player opens
-  const modal = getModal();
-  if (modal) {
-    new MutationObserver(function () {
-      if (!modal.classList.contains('hidden')) {
-        setTimeout(createShield, 400);
-        setTimeout(showHintBar, 1000);
-      }
-    }).observe(modal, { attributes: true, attributeFilter: ['class'] });
-  }
+  // ─── 4. Removed swClickShield in favor of iframe sandbox attribute ───────
 
   // ─── 5. Blur handler – close rogue popup windows ──────────────────────────
   // When the player is open and focus leaves (popup opened), instantly reclaim.
@@ -2056,10 +1987,12 @@
     if (!isPlayerOpen() || tabHidden) return;
     setTimeout(function () {
       try { window.focus(); } catch(e) {}
-      // Refocus shield so keyboard keeps working
-      if (shield && shield.parentElement && !passingThrough) {
-        try { shield.focus({ preventScroll: true }); } catch(e) {}
-      }
+      // Refocus parent window to keep keyboard shortcuts active
+      setTimeout(function () {
+        if (isPlayerOpen() && !tabHidden) {
+            try { window.focus(); } catch(e) {}
+        }
+      }, 200);
     }, 80);
   });
 
