@@ -797,7 +797,7 @@
         ];
         
         let favoriteServers = JSON.parse(localStorage.getItem('sw_fav_servers') || '[]');
-        let currentServerId = 'vidsrcnet'; // Default Videasy
+        let currentServerId = 'vidlink'; // Default VidLink
         let activePlayerTab = 'servers';
 
         function loadVideoSource() {
@@ -812,8 +812,8 @@
                     : `https://vidlink.pro/movie/${currentMovieId}?primaryColor=e11d48&autoplay=false`;
             } else if (serverKey === 'vidsrcnet') {
                 src = currentType === 'tv'
-                    ? `https://vidsrc.net/embed/tv?tmdb=${currentMovieId}&season=${activeSeasonNum}&episode=${activeEpisodeNum}`
-                    : `https://vidsrc.net/embed/movie?tmdb=${currentMovieId}`;
+                    ? `https://vidsrc.cc/v2/embed/tv/${currentMovieId}/${activeSeasonNum}/${activeEpisodeNum}`
+                    : `https://vidsrc.cc/v2/embed/movie/${currentMovieId}`;
             } else if (serverKey === 'vidsrcpro') {
                 src = currentType === 'tv'
                     ? `https://vidsrc.pro/embed/tv/${currentMovieId}/${activeSeasonNum}/${activeEpisodeNum}`
