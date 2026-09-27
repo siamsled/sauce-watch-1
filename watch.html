@@ -877,15 +877,16 @@
         let generalShowRuntime = null;
 
         const playerServers = [
-            { id: 'vidsrcsh',  name: 'Neon (VidSrc)',    audio: 'Largest Library',   flag: '⚡', key: 'vidsrcsh'  },
-            { id: 'vidlink',   name: 'Yoru (VidLink)',   audio: 'Premium UI',        flag: '🔥', key: 'vidlink'   },
-            { id: 'twoembed',  name: 'Sage (2Embed)',    audio: 'Wide Coverage',     flag: '🛡️', key: 'twoembed'  },
-            { id: 'vidsrccc',  name: 'Jett (VidSrc CC)', audio: 'Subtitles Ready',  flag: '🚀', key: 'vidsrccc'  },
-            { id: 'vidsrcpro', name: 'Reyna (VidSrc Pro)', audio: 'High Quality',   flag: '✨', key: 'vidsrcpro' },
+            { id: 'embedsu',   name: 'Embed.su (Main)',    audio: 'Anime/K-Drama',     flag: '🔥', key: 'embedsu'   },
+            { id: 'autoembed', name: 'AutoEmbed (Alt)',    audio: 'Huge Library',      flag: '⚡', key: 'autoembed' },
+            { id: 'vidlink',   name: 'VidLink (Zero Ads)', audio: 'Premium UI',        flag: '✨', key: 'vidlink'   },
+            { id: 'vidsrcme',  name: 'VidSrc.me (Sub/Dub)',audio: 'Largest Library',   flag: '🌐', key: 'vidsrcme'  },
+            { id: 'twoembed',  name: '2Embed (Backup)',    audio: 'Wide Coverage',     flag: '🛡️', key: 'twoembed'  },
+            { id: 'vidsrcsh',  name: 'VidSrc.sh (Ads)',    audio: 'Legacy Source',     flag: '📺', key: 'vidsrcsh'  },
         ];
         
         let favoriteServers = JSON.parse(localStorage.getItem('sw_fav_servers') || '[]');
-        let currentServerId = 'vidlink'; // Default: VidLink (Zero Ads, Premium UI)
+        let currentServerId = 'embedsu'; // Default: Embed.su (Huge library, Anime, K-Drama)
         let activePlayerTab = 'servers';
 
         function loadVideoSource() {
@@ -894,11 +895,18 @@
             const serverKey = srv.key;
             
             let src = '';
-            if (serverKey === 'vidsrcsh') {
-                // vidsrc.sh = new vidsrc.me — largest free streaming library
+            if (serverKey === 'embedsu') {
                 src = currentType === 'tv'
-                    ? `https://vidsrc.sh/embed/tv?tmdb=${currentMovieId}&season=${activeSeasonNum}&episode=${activeEpisodeNum}`
-                    : `https://vidsrc.sh/embed/movie?tmdb=${currentMovieId}`;
+                    ? `https://embed.su/embed/tv/${currentMovieId}/${activeSeasonNum}/${activeEpisodeNum}`
+                    : `https://embed.su/embed/movie/${currentMovieId}`;
+            } else if (serverKey === 'autoembed') {
+                src = currentType === 'tv'
+                    ? `https://autoembed.to/tv/tmdb/${currentMovieId}-${activeSeasonNum}-${activeEpisodeNum}`
+                    : `https://autoembed.to/movie/tmdb/${currentMovieId}`;
+            } else if (serverKey === 'vidsrcme') {
+                src = currentType === 'tv'
+                    ? `https://vidsrc.me/embed/tv?tmdb=${currentMovieId}&season=${activeSeasonNum}&episode=${activeEpisodeNum}`
+                    : `https://vidsrc.me/embed/movie?tmdb=${currentMovieId}`;
             } else if (serverKey === 'vidlink') {
                 src = currentType === 'tv'
                     ? `https://vidlink.pro/tv/${currentMovieId}/${activeSeasonNum}/${activeEpisodeNum}?primaryColor=e11d48&autoplay=true`
@@ -907,19 +915,23 @@
                 src = currentType === 'tv'
                     ? `https://www.2embed.cc/embedtv/${currentMovieId}&s=${activeSeasonNum}&e=${activeEpisodeNum}`
                     : `https://www.2embed.cc/embed/${currentMovieId}`;
-            } else if (serverKey === 'vidsrccc') {
-                src = currentType === 'tv'
-                    ? `https://vidsrc.cc/v2/embed/tv/${currentMovieId}/${activeSeasonNum}/${activeEpisodeNum}`
-                    : `https://vidsrc.cc/v2/embed/movie/${currentMovieId}`;
-            } else if (serverKey === 'vidsrcpro') {
-                src = currentType === 'tv'
-                    ? `https://vidsrc.pro/embed/tv/${currentMovieId}/${activeSeasonNum}/${activeEpisodeNum}`
-                    : `https://vidsrc.pro/embed/movie/${currentMovieId}`;
-            } else {
+            } else if (serverKey === 'vidsrcsh') {
                 src = currentType === 'tv'
                     ? `https://vidsrc.sh/embed/tv?tmdb=${currentMovieId}&season=${activeSeasonNum}&episode=${activeEpisodeNum}`
                     : `https://vidsrc.sh/embed/movie?tmdb=${currentMovieId}`;
+            } else {
+                src = currentType === 'tv'
+                    ? `https://embed.su/embed/tv/${currentMovieId}/${activeSeasonNum}/${activeEpisodeNum}`
+                    : `https://embed.su/embed/movie/${currentMovieId}`;
             }
+
+            // Apply sandbox protection dynamically (vidsrc.sh blocks it, others usually allow it)
+            if (serverKey === 'vidsrcsh') {
+                playerIframe.removeAttribute('sandbox');
+            } else {
+                playerIframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-presentation');
+            }
+
             playerIframe.src = src;
         }
 
