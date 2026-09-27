@@ -787,20 +787,17 @@
         let generalShowRuntime = null;
 
         const playerServers = [
-            { id: 'videasy', name: 'Videasy', audio: 'High Quality', flag: '✨', key: 'videasy' },
-            { id: 'vidsrc', name: 'Neon', audio: 'Original audio', flag: '🇺🇸', key: 'vidsrc' },
-            { id: 'vidlink', name: 'Yoru', audio: 'Movies only, may have 4K', flag: '🇺🇸', key: 'vidlink' },
-            { id: 'embedsu', name: 'Cypher', audio: 'Original audio', flag: '🇺🇸', key: 'embedsu' },
-            { id: 'vidsrcxyz', name: 'Sage', audio: 'Original audio', flag: '🇺🇸', key: 'vidsrcxyz' },
-            { id: 'breach', name: 'Breach', audio: 'Original audio', flag: '🇺🇸', key: 'vidlink' },
-            { id: 'vyse', name: 'Vyse', audio: 'Original audio', flag: '🇺🇸', key: 'vidsrc' },
-            { id: 'killjoy', name: 'Killjoy', audio: 'German audio', flag: '🇩🇪', key: 'vidlink' },
-            { id: 'fade', name: 'Fade', audio: 'Hindi audio', flag: '🇮🇳', key: 'vidsrc' },
-            { id: 'omen', name: 'Omen', audio: 'Spanish audio', flag: '🇲🇽', key: 'embedsu' }
+            { id: 'vidsrcnet', name: 'Neon (VidSrc NET)', audio: 'Best for Subtitles', flag: '⚡', key: 'vidsrcnet' },
+            { id: 'vidlink', name: 'Yoru (VidLink)', audio: 'Fastest, Premium UI', flag: '🔥', key: 'vidlink' },
+            { id: 'vidsrcpro', name: 'Jett (VidSrc PRO)', audio: 'High Quality', flag: '🚀', key: 'vidsrcpro' },
+            { id: 'autoembed', name: 'Phoenix (AutoEmbed)', audio: 'Multi-Language', flag: '🌍', key: 'autoembed' },
+            { id: 'vidsrcxyz', name: 'Sage (VidSrc XYZ)', audio: 'Backup Server', flag: '🛡️', key: 'vidsrcxyz' },
+            { id: 'embedsu', name: 'Cypher (EmbedSU)', audio: 'Alternative Server', flag: '👁️', key: 'embedsu' },
+            { id: 'videasy', name: 'Reyna (Videasy)', audio: 'Legacy Backup', flag: '✨', key: 'videasy' }
         ];
         
         let favoriteServers = JSON.parse(localStorage.getItem('sw_fav_servers') || '[]');
-        let currentServerId = 'videasy'; // Default Videasy
+        let currentServerId = 'vidsrcnet'; // Default Videasy
         let activePlayerTab = 'servers';
 
         function loadVideoSource() {
@@ -809,23 +806,34 @@
             const serverKey = srv.key;
             
             let src = '';
-            if (serverKey === 'videasy') {
+            if (serverKey === 'vidlink') {
                 src = currentType === 'tv'
-                    ? `https://player.videasy.net/tv/${currentMovieId}/${activeSeasonNum}/${activeEpisodeNum}`
-                    : `https://player.videasy.net/movie/${currentMovieId}`;
-            } else if (serverKey === 'vidlink') {
+                    ? `https://vidlink.pro/tv/${currentMovieId}/${activeSeasonNum}/${activeEpisodeNum}?primaryColor=e11d48&autoplay=false`
+                    : `https://vidlink.pro/movie/${currentMovieId}?primaryColor=e11d48&autoplay=false`;
+            } else if (serverKey === 'vidsrcnet') {
                 src = currentType === 'tv'
-                    ? `https://vidlink.pro/tv/${currentMovieId}/${activeSeasonNum}/${activeEpisodeNum}`
-                    : `https://vidlink.pro/movie/${currentMovieId}`;
+                    ? `https://vidsrc.net/embed/tv?tmdb=${currentMovieId}&season=${activeSeasonNum}&episode=${activeEpisodeNum}`
+                    : `https://vidsrc.net/embed/movie?tmdb=${currentMovieId}`;
+            } else if (serverKey === 'vidsrcpro') {
+                src = currentType === 'tv'
+                    ? `https://vidsrc.pro/embed/tv/${currentMovieId}/${activeSeasonNum}/${activeEpisodeNum}`
+                    : `https://vidsrc.pro/embed/movie/${currentMovieId}`;
+            } else if (serverKey === 'autoembed') {
+                src = currentType === 'tv'
+                    ? `https://player.autoembed.cc/embed/tv/${currentMovieId}/${activeSeasonNum}/${activeEpisodeNum}`
+                    : `https://player.autoembed.cc/embed/movie/${currentMovieId}`;
             } else if (serverKey === 'embedsu') {
                 src = `https://embed.su/embed/${currentType}/${currentMovieId}${currentType === 'tv' ? `/${activeSeasonNum}/${activeEpisodeNum}` : ''}`;
             } else if (serverKey === 'vidsrcxyz') {
                 src = `https://vidsrc.xyz/embed/${currentType}/${currentMovieId}${currentType === 'tv' ? `/${activeSeasonNum}/${activeEpisodeNum}` : ''}`;
-            } else {
-                // vidsrc (Neon)
+            } else if (serverKey === 'videasy') {
                 src = currentType === 'tv'
-                    ? `https://vidsrc.to/embed/tv/${currentMovieId}/${activeSeasonNum}/${activeEpisodeNum}`
-                    : `https://vidsrc.to/embed/movie/${currentMovieId}`;
+                    ? `https://player.videasy.net/tv/${currentMovieId}/${activeSeasonNum}/${activeEpisodeNum}`
+                    : `https://player.videasy.net/movie/${currentMovieId}`;
+            } else {
+                src = currentType === 'tv'
+                    ? `https://vidsrc.net/embed/tv?tmdb=${currentMovieId}&season=${activeSeasonNum}&episode=${activeEpisodeNum}`
+                    : `https://vidsrc.net/embed/movie?tmdb=${currentMovieId}`;
             }
             playerIframe.src = src;
         }
