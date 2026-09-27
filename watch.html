@@ -373,7 +373,8 @@
                     allowfullscreen 
                     scrolling="no" 
                     frameborder="0" 
-                    allow="autoplay; encrypted-media; picture-in-picture">
+                    allow="autoplay; encrypted-media; picture-in-picture"
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-pointer-lock">
             </iframe>
         </div>
 
@@ -1850,5 +1851,67 @@
 
         window.addEventListener('DOMContentLoaded', loadPlayerEngine);
     </script>
+<!-- ── AD / POPUP BLOCKER ── -->
+<script>
+  (function() {
+    // Layer 1: Override window.open to kill all popups
+    const _open = window.open.bind(window);
+    window.open = function(url, name, features) {
+      // Only allow named internal targets (e.g. fullscreen helpers) — block everything else
+      if (!name || name === '_blank' || name === '_self' || name === '_parent' || name === '_top') {
+        console.warn('[AdBlock] Blocked popup:', url);
+        return null;
+      }
+      return _open(url, name, features);
+    };
+
+    // Layer 2: Kill any rogue anchor clicks that try to open new tabs
+    document.addEventListener('click', function(e) {
+      const a = e.target.closest('a[target="_blank"]');
+      if (a && a.href && !a.href.startsWith(window.location.origin) && !a.closest('#videoPlayer')) {
+        const allowed = [
+          'youtube.com', 'youtu.be', 'themoviedb.org', 'imdb.com',
+          'vercel.app', 'sauce.watch', 'github.com'
+        ];
+        const isAllowed = allowed.some(d => a.href.includes(d));
+        if (!isAllowed) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          console.warn('[AdBlock] Blocked rogue anchor:', a.href);
+        }
+      }
+    }, true);
+
+    // Layer 3: Intercept beforeunload / navigation attempts from iframe messages
+    window.addEventListener('message', function(e) {
+      if (e.data && typeof e.data === 'string') {
+        if (e.data.includes('redirect') || e.data.includes('popup') || e.data.includes('window.open')) {
+          console.warn('[AdBlock] Blocked iframe message:', e.data);
+          e.stopImmediatePropagation();
+        }
+      }
+    }, true);
+
+    // Layer 4: MutationObserver to remove any injected ad overlays or new windows spawned in DOM
+    const observer = new MutationObserver(function(mutations) {
+      mutations.forEach(function(mutation) {
+        mutation.addedNodes.forEach(function(node) {
+          if (node.nodeType === 1) {
+            // Kill injected iframes that are NOT our main player
+            if (node.tagName === 'IFRAME' && node.id !== 'videoPlayer' && !node.closest('#playerRightPanel')) {
+              const src = node.src || '';
+              const knownPlayers = ['vidlink.pro', 'vidsrc.cc', 'vidsrc.pro', 'vidsrc.net', 'autoembed.cc', 'embed.su', 'vidsrc.xyz', 'videasy.net', 'youtube.com', 'youtu.be'];
+              if (!knownPlayers.some(p => src.includes(p))) {
+                node.remove();
+                console.warn('[AdBlock] Removed injected iframe:', src);
+              }
+            }
+          }
+        });
+      });
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  })();
+</script>
 </body>
 </html>
