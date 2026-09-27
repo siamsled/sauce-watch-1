@@ -377,6 +377,28 @@
             </iframe>
         </div>
 
+        <!-- Keyboard Shortcut Visual Feedback -->
+        <div id="kbFeedback" class="absolute inset-0 z-[15] flex items-center justify-center pointer-events-none" style="opacity:0; transition: opacity 0.15s;">
+            <div id="kbFeedbackIcon" class="w-20 h-20 rounded-full bg-black/60 backdrop-blur-sm flex items-center justify-center text-white text-3xl shadow-2xl" style="transform: scale(0.8); transition: transform 0.15s;">
+                <i id="kbFeedbackIco" class="fas fa-play"></i>
+            </div>
+        </div>
+
+        <!-- Keyboard shortcut hint bar (shown briefly when player opens) -->
+        <div id="kbHintBar" class="absolute bottom-20 left-1/2 z-[16] pointer-events-none" style="transform: translateX(-50%); opacity:0; transition: opacity 0.3s;">
+            <div class="flex items-center gap-3 bg-black/70 backdrop-blur-md border border-white/10 rounded-full px-5 py-2.5 text-xs text-white/70 whitespace-nowrap">
+                <span><kbd class="bg-white/10 rounded px-1.5 py-0.5 font-mono">Space</kbd> Play/Pause</span>
+                <span class="opacity-30">|</span>
+                <span><kbd class="bg-white/10 rounded px-1.5 py-0.5 font-mono">←→</kbd> Seek 10s</span>
+                <span class="opacity-30">|</span>
+                <span><kbd class="bg-white/10 rounded px-1.5 py-0.5 font-mono">M</kbd> Mute</span>
+                <span class="opacity-30">|</span>
+                <span><kbd class="bg-white/10 rounded px-1.5 py-0.5 font-mono">F</kbd> Fullscreen</span>
+                <span class="opacity-30">|</span>
+                <span><kbd class="bg-white/10 rounded px-1.5 py-0.5 font-mono">Esc</kbd> Close</span>
+            </div>
+        </div>
+
 
 
 
@@ -1932,6 +1954,162 @@
       installClickShield();
     }
   })();
+</script>
+<!-- ── KEYBOARD SHORTCUTS ── -->
+<script>
+(function() {
+  let isPlaying = true; // assume playing by default
+  let isMutedKb = false;
+  let kbFeedbackTimer = null;
+  let hintTimer = null;
+
+  function getIframe() { return document.getElementById('videoPlayer'); }
+  function isPlayerOpen() {
+    const m = document.getElementById('playerModal');
+    return m && !m.classList.contains('hidden');
+  }
+
+  // Send postMessage to iframe (works for providers like vidlink.pro that listen)
+  function sendToPlayer(msg) {
+    const iframe = getIframe();
+    if (!iframe || !iframe.src) return;
+    try {
+      const origin = new URL(iframe.src).origin;
+      iframe.contentWindow.postMessage(msg, origin);
+    } catch(e) {}
+    // Also try wildcard for cross-origin
+    try { iframe.contentWindow.postMessage(msg, '*'); } catch(e) {}
+  }
+
+  // Animated feedback icon in centre of screen
+  function showFeedback(iconClass, label) {
+    const wrapper = document.getElementById('kbFeedback');
+    const iconEl = document.getElementById('kbFeedbackIco');
+    const iconBox = document.getElementById('kbFeedbackIcon');
+    if (!wrapper || !iconEl) return;
+
+    iconEl.className = 'fas ' + iconClass;
+    wrapper.style.opacity = '1';
+    iconBox.style.transform = 'scale(1)';
+
+    clearTimeout(kbFeedbackTimer);
+    kbFeedbackTimer = setTimeout(function() {
+      wrapper.style.opacity = '0';
+      iconBox.style.transform = 'scale(0.8)';
+    }, 600);
+  }
+
+  // Show the hint bar briefly when player opens
+  function showHintBar() {
+    const bar = document.getElementById('kbHintBar');
+    if (!bar) return;
+    bar.style.opacity = '1';
+    clearTimeout(hintTimer);
+    hintTimer = setTimeout(function() { bar.style.opacity = '0'; }, 3500);
+  }
+
+  // Watch for player open/close to show hints
+  const playerModal = document.getElementById('playerModal');
+  if (playerModal) {
+    const modalObserver = new MutationObserver(function() {
+      if (!playerModal.classList.contains('hidden')) {
+        setTimeout(showHintBar, 800);
+        // Snap focus back to parent whenever player is open
+        setTimeout(function() { try { window.focus(); } catch(e) {} }, 100);
+      }
+    });
+    modalObserver.observe(playerModal, { attributes: true, attributeFilter: ['class'] });
+  }
+
+  // Continuously reclaim focus when player is open (blur events from iframe)
+  window.addEventListener('blur', function() {
+    if (isPlayerOpen()) {
+      setTimeout(function() { try { window.focus(); } catch(e) {} }, 30);
+    }
+  });
+
+  // ── Main keyboard handler ──
+  document.addEventListener('keydown', function(e) {
+    if (!isPlayerOpen()) return;
+
+    // Don't hijack shortcuts when typing in an input
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+    switch(e.code) {
+      case 'Space':
+      case 'KeyK': // YouTube-style K shortcut
+        e.preventDefault();
+        isPlaying = !isPlaying;
+        if (isPlaying) {
+          sendToPlayer({ action: 'play' });
+          sendToPlayer('play');
+          showFeedback('fa-play', 'Play');
+        } else {
+          sendToPlayer({ action: 'pause' });
+          sendToPlayer('pause');
+          showFeedback('fa-pause', 'Pause');
+        }
+        break;
+
+      case 'ArrowRight':
+      case 'KeyL': // YouTube-style L shortcut (+10s)
+        e.preventDefault();
+        sendToPlayer({ action: 'seek', seconds: 10 });
+        sendToPlayer({ seek: 10 });
+        showFeedback('fa-forward', '+10s');
+        break;
+
+      case 'ArrowLeft':
+      case 'KeyJ': // YouTube-style J shortcut (-10s)
+        e.preventDefault();
+        sendToPlayer({ action: 'seek', seconds: -10 });
+        sendToPlayer({ seek: -10 });
+        showFeedback('fa-backward', '-10s');
+        break;
+
+      case 'ArrowUp':
+        e.preventDefault();
+        sendToPlayer({ action: 'volume', delta: 0.1 });
+        showFeedback('fa-volume-up', 'Volume +');
+        break;
+
+      case 'ArrowDown':
+        e.preventDefault();
+        sendToPlayer({ action: 'volume', delta: -0.1 });
+        showFeedback('fa-volume-down', 'Volume -');
+        break;
+
+      case 'KeyM':
+        e.preventDefault();
+        isMutedKb = !isMutedKb;
+        sendToPlayer({ action: 'mute', value: isMutedKb });
+        sendToPlayer(isMutedKb ? 'mute' : 'unmute');
+        showFeedback(isMutedKb ? 'fa-volume-mute' : 'fa-volume-up', isMutedKb ? 'Muted' : 'Unmuted');
+        break;
+
+      case 'KeyF':
+        e.preventDefault();
+        try {
+          const iframe = getIframe();
+          if (iframe) {
+            if (document.fullscreenElement) {
+              document.exitFullscreen();
+            } else {
+              iframe.requestFullscreen();
+            }
+          }
+        } catch(e2) {}
+        showFeedback('fa-expand', 'Fullscreen');
+        break;
+
+      case 'Escape':
+        // Close player — trigger the close button
+        const closeBtn = document.getElementById('closePlayerBtn');
+        if (closeBtn) closeBtn.click();
+        break;
+    }
+  }, true); // capture phase so we always get it first
+})();
 </script>
 </body>
 </html>
