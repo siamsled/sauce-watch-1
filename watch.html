@@ -175,9 +175,64 @@
           transform: translateY(-2px);
           box-shadow: 0 6px 18px rgba(0,0,0,0.32);
         }
-        /* Premium custom video player styles */
-        #playerModal {
-            background-color: #000 !important;
+        /* ── Top Navigation Bar ── */
+        #watchTopBar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 110;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: max(env(safe-area-inset-top), 12px) 20px 12px;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.75) 0%, transparent 100%);
+            backdrop-filter: blur(0px);
+            -webkit-backdrop-filter: blur(0px);
+            pointer-events: none;
+            transition: background 0.3s ease;
+        }
+        #watchTopBar > * { pointer-events: auto; }
+
+        .top-nav-btn {
+            width: 40px; height: 40px;
+            border-radius: 50%;
+            background: rgba(0,0,0,0.45);
+            border: 1px solid rgba(255,255,255,0.12);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            color: #fff;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 14px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.2s, transform 0.15s;
+            flex-shrink: 0;
+        }
+        .top-nav-btn:hover { background: rgba(255,255,255,0.15); transform: scale(1.08); }
+        .top-nav-btn:active { transform: scale(0.95); }
+
+        #watchNavTitle {
+            font-size: 13px;
+            font-weight: 600;
+            color: rgba(255,255,255,0.9);
+            letter-spacing: 0.01em;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: calc(100vw - 140px);
+            opacity: 0;
+            transition: opacity 0.4s ease;
+            line-height: 1.3;
+        }
+        #watchNavTitle.visible { opacity: 1; }
+        #watchNavTitle .nav-episode {
+            display: block;
+            font-size: 11px;
+            font-weight: 400;
+            color: rgba(255,255,255,0.5);
+            margin-top: 1px;
         }
         #playerPanelContent::-webkit-scrollbar {
             width: 4px;
@@ -194,15 +249,26 @@
 </head>
 <body class="bg-zinc-950 text-zinc-100 min-h-screen flex flex-col font-sans antialiased overflow-x-hidden select-none">
 
-    <!-- Back Button (Absolute Top Left) -->
-    <a href="index.html" class="absolute left-8 z-[110] bg-black/60 hover:bg-black/80 w-10 h-10 rounded-full flex items-center justify-center border border-white/10 text-white transition-all shadow-lg" style="top: max(2rem, calc(env(safe-area-inset-top) + 0.5rem));">
-        <i class="fas fa-chevron-left text-sm"></i>
-    </a>
+    <!-- ── Modern Top Navigation Bar ── -->
+    <nav id="watchTopBar" aria-label="Watch page navigation">
+        <!-- Left: Back -->
+        <a href="index.html" class="top-nav-btn" title="Go back" aria-label="Go back">
+            <i class="fas fa-chevron-left"></i>
+        </a>
 
-    <!-- Floating Audio Toggle Button (Absolute Top Right) -->
-    <button id="trailerVolumeBtn" class="hidden absolute right-8 z-[110] bg-black/60 hover:bg-black/80 w-10 h-10 rounded-full flex items-center justify-center border border-white/10 text-white transition-all shadow-lg" style="top: max(2rem, calc(env(safe-area-inset-top) + 0.5rem));">
-        <i id="volumeIcon" class="fas fa-volume-mute text-sm"></i>
-    </button>
+        <!-- Center: Title + Episode -->
+        <div id="watchNavTitle" aria-live="polite">
+            <span id="watchNavTitleText"></span>
+            <span id="watchNavEpisodeText" class="nav-episode"></span>
+        </div>
+
+        <!-- Right: Volume toggle -->
+        <button id="trailerVolumeBtn" class="top-nav-btn hidden" title="Toggle trailer audio" aria-label="Toggle trailer audio">
+            <i id="volumeIcon" class="fas fa-volume-mute"></i>
+        </button>
+        <!-- Placeholder to keep centering when volume btn is hidden -->
+        <div id="watchNavRightSpacer" style="width:40px;flex-shrink:0;"></div>
+    </nav>
 
     <!-- Details Hero Section (Immersive Background) -->
     <section id="heroSection" class="relative h-screen w-full overflow-hidden bg-zinc-950 flex items-end">
@@ -575,7 +641,11 @@
                 }
                 if (staticImg) staticImg.style.opacity = '0';
                 const volBtn = document.getElementById('trailerVolumeBtn');
-                if (volBtn) volBtn.classList.remove('hidden');
+                if (volBtn) {
+                    volBtn.classList.remove('hidden');
+                    const spacer = document.getElementById('watchNavRightSpacer');
+                    if (spacer) spacer.style.display = 'none';
+                }
                 if (!trailerIsPlaying) enableHeroFocusMode();
             };
 
@@ -1344,6 +1414,12 @@
                     const genresList = (data.genres || []).map(g => g.name).join(", ");
                     
                     document.title = `Watching ${title} - sauce.watch`;
+
+                    // Populate the top nav bar title
+                    const navTitleEl = document.getElementById('watchNavTitleText');
+                    const navTitleWrapper = document.getElementById('watchNavTitle');
+                    if (navTitleEl) navTitleEl.textContent = title + (year !== 'N/A' ? ` · ${year}` : '');
+                    if (navTitleWrapper) setTimeout(() => navTitleWrapper.classList.add('visible'), 600);
                     
                     // Fetch logo images
                     let logoUrl = null;
