@@ -1388,14 +1388,9 @@
                 document.getElementById('recommendationsSection').scrollIntoView({ behavior: 'smooth' });
             });
 
-            // Set main Play button listener
+            // Set main Play button listener — open player immediately for all types
             document.getElementById('mainPlayBtn').addEventListener('click', () => {
-                if (currentType === 'tv') {
-                    // TV shows: scroll to episode list or play first episode
-                    document.getElementById('tvSelectorContainer').scrollIntoView({ behavior: 'smooth' });
-                } else {
-                    openPlayerModal();
-                }
+                openPlayerModal();
             });
 
             // Set background trailer
@@ -1926,8 +1921,8 @@
 
         window.addEventListener('DOMContentLoaded', async () => {
             await loadPlayerEngine();
-            // Auto-open the player immediately — user already clicked Watch, no 2nd click needed
-            setTimeout(openPlayerModal, 300);
+            // Auto-open the player — longer delay ensures page is fully rendered
+            setTimeout(openPlayerModal, 800);
         });
     </script>
 <!-- ── PLAYER PROTECTION + KEYBOARD SHORTCUTS ── -->
